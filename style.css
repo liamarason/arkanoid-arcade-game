@@ -1,0 +1,18 @@
+body {
+  font-family: "Open Sans", sans-serif;
+}
+
+canvas {
+  border: 1px solid;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -60%);
+}
+
+div {
+  position: fixed;
+  top: 80%;
+  left: 50%;
+  transform: translate(-50%, 50%);
+}
