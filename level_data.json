@@ -1,0 +1,22 @@
+{
+  "levelOne": {
+    "totalCount": 15,
+    "rowCount": 3,
+    "colCount": 5,
+    "hardPosition": "top"
+  },
+
+  "levelTwo": {
+    "totalCount": 20,
+    "rowCount": 4,
+    "colCount": 5,
+    "hardPosition": "bottom"
+  },
+
+  "levelThree": {
+    "totalCount": 25,
+    "rowCount": 5,
+    "colCount": 5,
+    "hardPosition": "diagonal"
+  }
+}

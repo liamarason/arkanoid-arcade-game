@@ -2,17 +2,14 @@ body {
   font-family: "Open Sans", sans-serif;
 }
 
-canvas {
+#game {
+  position: absolute;
+  top:0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin:auto;
   border: 1px solid;
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -60%);
-}
-
-div {
-  position: fixed;
-  top: 80%;
-  left: 50%;
-  transform: translate(-50%, 50%);
+  background-image: url(https://c1.staticflickr.com/3/2633/4081217254_d2e7bf59f3.jpg);
+  border-color: yellow;
 }

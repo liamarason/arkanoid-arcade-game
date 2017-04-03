@@ -1,39 +1,49 @@
 $(window).ready(function() {
+  newLevel(level)
   window.requestAnimationFrame(draw)
 })
 
-var canvas = document.getElementById("canvas")
+var canvas = document.getElementById("game")
 var ctx = canvas.getContext("2d")
 
+var allowSpace = true
 var leftPressed = false
 var rightPressed = false
 var spacePressed = false
-var allowSpace = true
+var powerUpActive = false
 
-var lives = 3
 var blocksDestroyed = 0
-var blocksToWin = 15
+var paddleHitsSincePowerUp = 0
+var level = 1
+var lives = 3
+var powerUpHitsMax = 3
+
+var blocksToWin
+var powerUpSpawn
+var powerUpType
 
 var ball = {
-  radius: 5,
   x: canvas.width/2,
   y: canvas.height - 45,
   xVelocity: 0,
   yVelocity: 0,
-  prevXVelocity: 3, //start at inital velocty
-  prevYVelocity: -3
+  prevXVelocity: 3, // start at inital velocty
+  prevYVelocity: -3,
+  radius: 5
 }
 
 var paddle = {
+  x: (canvas.width - 75)/2,
+  y: canvas.height - 40,
   height: 10,
   width: 75,
-  x: (canvas.width - 75)/2,
-  y: canvas.height - 40
+  cornerRadius: 5
 }
 
+var blocks = []
 var block = {
-  rowSize: 3,
-  colSize: 5,
+  rowSize: 0,
+  colSize: 0,
   width: 75,
   height: 20,
   padding: 5,
@@ -41,22 +51,12 @@ var block = {
   spacingLeft: 30
 }
 
-var blocks = []
-for (i = 0; i < block.colSize; i ++) {
-  blocks[i] = []
-  for(j = 0; j < block.rowSize; j ++) {
-    blocks[i][j] = {
-      x: 0,
-      y: 0,
-      visible: 1,
-      state: "soft",
-      hitsToBreak: 1
-    }
-    if (j === 0) {
-      blocks[i][j].state = "hard"
-      blocks[i][j].hitsToBreak = 3
-    }
-  }
+var powerUp = {
+  x: 0,
+  y: 0,
+  width: 12,
+  velocity: 1.5,
+  visible: false
 }
 
 $(window).keydown(function(e) {
@@ -75,30 +75,92 @@ $(window).keyup(function(e) {
   }
 });
 
+$(window).keydown(function(e) {
+  if (e.keyCode === 32 && allowSpace) {
+    var a = Math.pow(ball.prevXVelocity, 2)
+    var b = Math.pow(ball.prevYVelocity, 2)
+    var totalSpeed = Math.sqrt(a + b)
+
+    ball.xVelocity = totalSpeed*Math.cos(Math.PI/4)
+    ball.yVelocity = -totalSpeed*Math.sin(Math.PI/4)
+    spacePressed = true
+    allowSpace = false
+  }
+});
+
+function newLevel(levelValue) {
+  $.getJSON("level_data.json", function(data) {
+    var lvl
+    if (levelValue === 1) {
+      lvl = data.levelOne
+    } else if (levelValue === 2) {
+      lvl = data.levelTwo
+    } else {
+      lvl = data.levelThree
+    }
+    block.rowSize = lvl.rowCount
+    block.colSize = lvl.colCount
+    blocksToWin = lvl.totalCount
+    hardPosition = lvl.hardPosition
+
+    // random power-up spawn and type for each level
+    powerUpSpawn = Math.floor(Math.random() * (10 - 3)) + 3
+    if (Math.round(Math.random())) {
+      powerUpType = "width"
+    } else {
+      powerUpType = "noDeflect"
+    }
+
+    // create blocks
+    for (i = 0; i < block.colSize; i ++) {
+      blocks[i] = []
+      for(j = 0; j < block.rowSize; j ++) {
+        blocks[i][j] = {
+          x: 0,
+          y: 0,
+          visible: 1,
+          state: "soft",
+          hitsToBreak: 1
+        }
+        if ((j === 0 && hardPosition === "top") || (j === block.rowSize - 1 && hardPosition === "bottom")
+        || ((i === j || i + j === block.rowSize - 1) && hardPosition === "diagonal")) {
+          blocks[i][j].state = "hard"
+          blocks[i][j].hitsToBreak = 3
+        }
+      }
+    }
+  })
+}
+
 /**
   Adapted from http://stackoverflow.com/questions/16494262/how-to-draw-a-circle-with-centered-fadeing-out-gradients-with-html5-canvas
  */
 function drawBall() {
   ctx.beginPath()
-  innerRadius = 1
-  outerRadius = ball.radius
-  var gradient = ctx.createRadialGradient(ball.x, ball.y, innerRadius, ball.x, ball.y, outerRadius)
-  gradient.addColorStop(0, 'white')
-  gradient.addColorStop(1, 'RGB(148, 152, 161)')
+  var gradient = ctx.createRadialGradient(ball.x, ball.y, 1, ball.x, ball.y, ball.radius)
+  if (powerUpActive && powerUpType === "noDeflect") {
+    gradient.addColorStop(0, "red")
+  } else {
+    gradient.addColorStop(0, "white")
+  }
+  gradient.addColorStop(1, "RGB(148, 152, 161)")
   ctx.arc(ball.x, ball.y, ball.radius, 0, 2*Math.PI)
   ctx.fillStyle = gradient
   ctx.fill()
-  ctx.closePath()
+  if (powerUpActive && powerUpType === "noDeflect") {
+    ctx.strokeStyle = "yellow"
+    ctx.stroke()
+  }
 }
 
 function drawPaddle() {
-  roundRect(paddle.x, paddle.y, paddle.width, paddle.height)
+  roundRect(paddle.x, paddle.y, paddle.width, paddle.height, paddle.cornerRadius)
 }
 
 /**
   Adapted from http://js-bits.blogspot.ca/2010/07/canvas-rounded-corner-rectangles.html
  */
-function roundRect(x, y, width, height, radius = 5) {
+function roundRect(x, y, width, height, radius) {
   ctx.beginPath()
   ctx.moveTo(x + radius, y)
   ctx.lineTo(x + width - radius, y)
@@ -109,10 +171,10 @@ function roundRect(x, y, width, height, radius = 5) {
   ctx.quadraticCurveTo(x, y + height, x, y + height - radius)
   ctx.lineTo(x, y + radius)
   ctx.quadraticCurveTo(x, y, x + radius, y)
-  ctx.closePath()
-  ctx.stroke()
-  ctx.fillStyle = "orange"
+  ctx.strokeStyle = "yellow"
+  ctx.fillStyle = "grey"
   ctx.fill()
+  ctx.stroke()
 }
 
 function drawblocks() {
@@ -127,17 +189,31 @@ function drawblocks() {
         ctx.beginPath()
         ctx.rect(newX, newY, block.width, block.height)
         if (blocks[i][j].state === "hard") {
-          ctx.fillStyle = "grey"
+          ctx.fillStyle = "#1c128c"
         } else {
-          ctx.fillStyle = "brown"
+          ctx.fillStyle = "#5c3b91"
         }
-        ctx.fill()
         ctx.strokeStyle = "black"
+        ctx.fill()
         ctx.stroke()
-        ctx.closePath()
       }
     }
   }
+}
+
+function drawPowerUp() {
+  powerUp.x - powerUp.width/2
+  powerUp.y - (powerUp.width/3)/2
+
+  ctx.beginPath()
+  ctx.rect(powerUp.x, powerUp.y, powerUp.width, powerUp.width/3)
+  ctx.rect(powerUp.x + powerUp.width/3, powerUp.y - powerUp.width/3, powerUp.width/3, powerUp.width)
+  if (powerUpType === "noDeflect") {
+    ctx.fillStyle = "red"
+  } else {
+    ctx.fillStyle = "yellow"
+  }
+  ctx.fill()
 }
 
 function blockHit() {
@@ -145,18 +221,30 @@ function blockHit() {
     for (j = 0; j < block.rowSize; j ++) {
       var cur = blocks[i][j]
       if (cur.visible === 1) {
-        if (ball.x + ball.radius > cur.x && ball.x - ball.radius < cur.x + block.width
-          && ball.y - ball.radius < cur.y + block.height && ball.y + ball.radius > cur.y) {
-          if ((ball.x < cur.x || ball.x > cur.x + block.width) && ball.xVelocity !== 0) {
-            ball.xVelocity = -ball.xVelocity
-          } else {
-            ball.yVelocity = -ball.yVelocity
+        if (ball.x + ball.radius >= cur.x && ball.x - ball.radius <= cur.x + block.width
+          && ball.y - ball.radius <= cur.y + block.height && ball.y + ball.radius >= cur.y) {
+
+          if (!powerUpActive || powerUpType !== "noDeflect") {
+            // check the location of the ball in the previous frame to determine deflection direction
+            if ((ball.x + ball.radius - ball.xVelocity < cur.x || ball.x - ball.radius - ball.xVelocity > cur.x + block.width)
+            && Math.abs(ball.xVelocity) > 0) {
+              ball.xVelocity *= -1
+            } else {
+              ball.yVelocity *= -1
+            }
           }
-          if (cur.hitsToBreak === 1) {
+
+          if (cur.hitsToBreak === 1 || (powerUpActive && powerUpType === "noDeflect")) {
             cur.visible = 0
             blocksDestroyed ++
+
+            if (blocksDestroyed === powerUpSpawn) {
+              powerUp.x = cur.x + block.width/2
+              powerUp.y = cur.y + block.height/2
+              powerUp.visible = true
+            }
           } else {
-            cur.hitsToBreak = cur.hitsToBreak - 1
+            cur.hitsToBreak --
           }
           return
         }
@@ -166,91 +254,78 @@ function blockHit() {
 }
 
 function paddleHit() {
-  if (ball.x + ball.radius > paddle.x && ball.x - ball.radius < paddle.x + paddle.width
-    && ball.y + ball.radius > paddle.y && ball.y - ball.radius < paddle.y + paddle.height) {
-    sectionSize = paddle.width/7
+  if (ball.x + ball.radius >= paddle.x && ball.x - ball.radius <= paddle.x + paddle.width
+    && ball.y + ball.radius > paddle.y && ball.y <= paddle.y + paddle.height/2) {
 
     var a = Math.pow(ball.xVelocity, 2)
-    //speed up  the ball by 0.5 in y direction every paddle hit
-    var b = Math.pow(ball.yVelocity + 0.3, 2)
+    // speed up the ball by 0.2 in the y direction every paddle hit
+    var b = Math.pow(ball.yVelocity + 0.2, 2)
     var totalSpeed = Math.sqrt(a + b)
 
-    if (ball.x < paddle.x + sectionSize) {
-      //35 degree angle left
-      ball.xVelocity = -totalSpeed*Math.cos(Math.PI/5.14)
-      ball.yVelocity = -totalSpeed*Math.sin(Math.PI/5.14)
-    } else if (ball.x < paddle.x + 2*sectionSize) {
-      //45 degree angle left
-      ball.xVelocity = -totalSpeed*Math.cos(Math.PI/4)
-      ball.yVelocity = -totalSpeed*Math.sin(Math.PI/4)
-    } else if (ball.x < paddle.x + 3*sectionSize) {
-      //60 degree angle left
-      ball.xVelocity = -totalSpeed*Math.cos(Math.PI/2.77)
-      ball.yVelocity = -totalSpeed*Math.sin(Math.PI/2.77)
-    } else if (ball.x < paddle.x + 4*sectionSize) {
-      //bounce straight up (90 degree angle)
-      ball.yVelocity = -totalSpeed
-      ball.xVelocity = 0
-    } else if (ball.x < paddle.x + 5*sectionSize) {
-      //60 degree angle right
-      ball.xVelocity = totalSpeed*Math.cos(Math.PI/2.77)
-      ball.yVelocity = -totalSpeed*Math.sin(Math.PI/2.77)
-    } else if (ball.x < paddle.x + 6*sectionSize) {
-      //45 degree angle right
-      ball.xVelocity = totalSpeed*Math.cos(Math.PI/4)
-      ball.yVelocity = -totalSpeed*Math.sin(Math.PI/4)
+    // map each position on the paddle to an angle
+    var range = Math.PI/2 - Math.PI/5
+    if (ball.x < paddle.x + paddle.width/2) {
+      var ratio = (ball.x - paddle.x)/(paddle.width/2)
+      var newAngle = ratio*range + Math.PI/5
+      ball.xVelocity = -totalSpeed*Math.cos(newAngle)
+      ball.yVelocity = -totalSpeed*Math.sin(newAngle)
     } else {
-      //35 degree angle right
-      ball.xVelocity = totalSpeed*Math.cos(Math.PI/5.14)
-      ball.yVelocity = -totalSpeed*Math.sin(Math.PI/5.14)
+      var ratio = (ball.x - paddle.x - paddle.width/2)/(paddle.width/2)
+      var newAngle = Math.PI/2 - ratio*range
+      ball.xVelocity = totalSpeed*Math.cos(newAngle)
+      ball.yVelocity = -totalSpeed*Math.sin(newAngle)
+    }
+
+    if (powerUpActive) {
+      paddleHitsSincePowerUp ++
     }
   }
 }
 
-function drawLives() {
-  ctx.font = "16px Arial"
-  ctx.fillStyle = "black"
-  ctx.fillText("Lives: " + lives, canvas.width - 60, canvas.height - 5)
+function powerUpHit() {
+  if (powerUp.visible) {
+    // collision detection for falling power-up
+    if (powerUp.x + powerUp.width/2 >= paddle.x - paddle.cornerRadius
+      && powerUp.x - powerUp.width/2 <= paddle.x + paddle.width + paddle.cornerRadius
+      && powerUp.y + powerUp.width/2 >= paddle.y
+      && powerUp.y - powerUp.width/2 <= paddle.y + paddle.height) {
+
+      if (powerUpType === "width") {
+        paddle.width += 100
+        paddle.x -= 50
+      }
+
+      powerUp.visible = false
+      powerUpActive = true
+
+      // power-up has fallen out of vision
+    } else if (powerUp.y >= canvas.height) {
+      powerUp.visible = false
+    } else {
+      drawPowerUp()
+      powerUp.y += powerUp.velocity
+    }
+  }
 }
 
-function draw() {
-  $(window).keydown(function(e) {
-    if (e.keyCode === 32 && allowSpace) {
-      var a = Math.pow(ball.prevXVelocity, 2)
-      var b = Math.pow(ball.prevYVelocity, 2)
-      var totalSpeed = Math.sqrt(a + b)
-
-      ball.xVelocity = totalSpeed*Math.cos(Math.PI/4)
-      ball.yVelocity = -totalSpeed*Math.sin(Math.PI/4)
-      spacePressed = true
-      allowSpace = false
+function wallHit() {
+  // left or right wall
+  if (ball.x + ball.radius >= canvas.width || ball.x - ball.radius <= 0) {
+    ball.xVelocity *= -1
+    // if ball is still past a left or right wall in the next frame, it will get stuck,
+    if (ball.x + ball.radius + ball.xVelocity >= canvas.width) {
+      // make it jump back into the canvas
+      ball.x = canvas.width - ball.radius - 1
+    } else if (ball.x - ball.radius + ball.xVelocity <= 0) {
+      ball.x = ball.radius + 1
     }
-  });
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  drawBall()
-  drawPaddle()
-  drawblocks()
-  paddleHit()
-  blockHit()
-  drawLives()
-
-  if (blocksDestroyed === blocksToWin) {
-    alert("YOU WIN!")
-    document.location.reload()
   }
 
-  //hits a wall on the left or right
-  if (ball.x + ball.xVelocity > canvas.width - ball.radius ||
-  ball.x + ball.xVelocity < ball.radius) {
-    ball.xVelocity = -ball.xVelocity
-  }
-
-  //hits a wall on the top or bottom
-  if (ball.y + ball.yVelocity < ball.radius) {
-    ball.yVelocity = -ball.yVelocity
-  } else if (ball.y + ball.yVelocity > canvas.height - ball.radius) {
-    //life lost or game over
+  // top or bottom wall
+  if (ball.y - ball.radius <= 0) {
+    ball.yVelocity *= -1
+  } else if (ball.y + ball.radius >= canvas.height) {
+    // life lost or game over
     ball.prevXVelocity = ball.xVelocity
     ball.prevYVelocity = ball.yVelocity
     lives --
@@ -258,22 +333,76 @@ function draw() {
       alert("GAME OVER!")
       document.location.reload()
     } else {
-      ball.x = canvas.width/2
-      ball.y = paddle.y - ball.radius
-      ball.xVelocity = 0
-      ball.yVelocity = 0
-      paddle.x = (canvas.width - paddle.width)/2
-      spacePressed = false
-      allowSpace = true
+      reset()
+    }
+  }
+}
+
+function drawInfo() {
+  ctx.font = "15px Arial"
+  ctx.fillStyle = "white"
+  ctx.fillText("Level: " + level + "/3", 5, canvas.height - 5)
+  ctx.fillText("Lives: " + lives, canvas.width - 55, canvas.height - 5)
+}
+
+function reset() {
+  paddle.width = 75
+  ball.x = canvas.width/2
+  ball.y = paddle.y - ball.radius
+  ball.xVelocity = 0
+  ball.yVelocity = 0
+  paddle.x = (canvas.width - paddle.width)/2
+  spacePressed = false
+  allowSpace = true
+  paddleHitsSincePowerUp = 0
+  powerUpActive = false
+  powerUp.visible = false
+}
+
+// main recursive function that executes rendering of each frame
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  wallHit()
+  paddleHit()
+  blockHit()
+  powerUpHit()
+
+  drawBall()
+  drawPaddle()
+  drawblocks()
+  drawInfo()
+
+  if (paddleHitsSincePowerUp === powerUpHitsMax && powerUpActive) {
+    if (powerUpType === "width") {
+      paddle.width = 75
+      paddle.x += 50
+    }
+    powerUpActive = false
+    paddleHitsSincePowerUp = 0
+  }
+
+  if (blocksDestroyed === blocksToWin) {
+    if (level === 3) {
+      alert("YOU WIN!")
+      document.location.reload()
+    } else {
+      reset()
+      lives = 3
+      blocksDestroyed = 0
+      ball.prevXVelocity = 3
+      ball.prevYVelocity = -3
+
+      level ++
+      newLevel(level)
     }
   }
 
-  if (rightPressed && paddle.x < canvas.width - paddle.width) {
+  if (rightPressed && paddle.x < canvas.width - (paddle.width + paddle.cornerRadius)) {
     paddle.x += 7
     if (!spacePressed) {
       ball.x += 7
     }
-  } else if (leftPressed && paddle.x > 0) {
+  } else if (leftPressed && paddle.x - paddle.cornerRadius > 0) {
     paddle.x -= 7
     if (!spacePressed) {
       ball.x -= 7
