@@ -16,7 +16,7 @@ var blocksDestroyed = 0
 var paddleHitsSincePowerUp = 0
 var level = 1
 var lives = 3
-var powerUpHitsMax = 3
+var powerUpHitsMax = 4
 
 var blocksToWin
 var powerUpSpawn
@@ -27,7 +27,7 @@ var ball = {
   y: canvas.height - 45,
   xVelocity: 0,
   yVelocity: 0,
-  prevXVelocity: 3, // start at inital velocty
+  prevXVelocity: 3, // start at initial velocity
   prevYVelocity: -3,
   radius: 5
 }
@@ -80,7 +80,6 @@ $(window).keydown(function(e) {
     var a = Math.pow(ball.prevXVelocity, 2)
     var b = Math.pow(ball.prevYVelocity, 2)
     var totalSpeed = Math.sqrt(a + b)
-
     ball.xVelocity = totalSpeed*Math.cos(Math.PI/4)
     ball.yVelocity = -totalSpeed*Math.sin(Math.PI/4)
     spacePressed = true
@@ -103,7 +102,7 @@ function newLevel(levelValue) {
     blocksToWin = lvl.totalCount
     hardPosition = lvl.hardPosition
 
-    // random power-up spawn and type for each level
+    // random power-up spawn location and type for each level
     powerUpSpawn = Math.floor(Math.random() * (10 - 3)) + 3
     if (Math.round(Math.random())) {
       powerUpType = "width"
@@ -118,7 +117,7 @@ function newLevel(levelValue) {
         blocks[i][j] = {
           x: 0,
           y: 0,
-          visible: 1,
+          visible: true,
           state: "soft",
           hitsToBreak: 1
         }
@@ -132,9 +131,6 @@ function newLevel(levelValue) {
   })
 }
 
-/**
-  Adapted from http://stackoverflow.com/questions/16494262/how-to-draw-a-circle-with-centered-fadeing-out-gradients-with-html5-canvas
- */
 function drawBall() {
   ctx.beginPath()
   var gradient = ctx.createRadialGradient(ball.x, ball.y, 1, ball.x, ball.y, ball.radius)
@@ -157,9 +153,7 @@ function drawPaddle() {
   roundRect(paddle.x, paddle.y, paddle.width, paddle.height, paddle.cornerRadius)
 }
 
-/**
-  Adapted from http://js-bits.blogspot.ca/2010/07/canvas-rounded-corner-rectangles.html
- */
+// draws a round rectangle
 function roundRect(x, y, width, height, radius) {
   ctx.beginPath()
   ctx.moveTo(x + radius, y)
@@ -180,7 +174,7 @@ function roundRect(x, y, width, height, radius) {
 function drawblocks() {
   for (i = 0; i < block.colSize; i ++) {
     for (j = 0; j < block.rowSize; j ++) {
-      if (blocks[i][j].visible === 1) {
+      if (blocks[i][j].visible) {
         var newX = i*(block.width + block.padding) + block.spacingLeft
         var newY = j*(block.height + block.padding) + block.spacingTop
         blocks[i][j].x = newX
@@ -216,11 +210,12 @@ function drawPowerUp() {
   ctx.fill()
 }
 
+// for each block still visible, check for a collision with the ball
 function blockHit() {
   for (i = 0; i < block.colSize; i ++) {
     for (j = 0; j < block.rowSize; j ++) {
       var cur = blocks[i][j]
-      if (cur.visible === 1) {
+      if (cur.visible) {
         if (ball.x + ball.radius >= cur.x && ball.x - ball.radius <= cur.x + block.width
           && ball.y - ball.radius <= cur.y + block.height && ball.y + ball.radius >= cur.y) {
 
@@ -235,7 +230,7 @@ function blockHit() {
           }
 
           if (cur.hitsToBreak === 1 || (powerUpActive && powerUpType === "noDeflect")) {
-            cur.visible = 0
+            cur.visible = false
             blocksDestroyed ++
 
             if (blocksDestroyed === powerUpSpawn) {
@@ -258,11 +253,11 @@ function paddleHit() {
     && ball.y + ball.radius > paddle.y && ball.y <= paddle.y + paddle.height/2) {
 
     var a = Math.pow(ball.xVelocity, 2)
-    // speed up the ball by 0.2 in the y direction every paddle hit
-    var b = Math.pow(ball.yVelocity + 0.2, 2)
+    // speed up the ball by 0.25 in the y direction every paddle hit
+    var b = Math.pow(ball.yVelocity + 0.25, 2)
     var totalSpeed = Math.sqrt(a + b)
 
-    // map each position on the paddle to an angle
+    // map each position on the paddle to a unique angle
     var range = Math.PI/2 - Math.PI/5
     if (ball.x < paddle.x + paddle.width/2) {
       var ratio = (ball.x - paddle.x)/(paddle.width/2)
@@ -298,7 +293,7 @@ function powerUpHit() {
       powerUp.visible = false
       powerUpActive = true
 
-      // power-up has fallen out of vision
+      // power-up has fallen out of canvas
     } else if (powerUp.y >= canvas.height) {
       powerUp.visible = false
     } else {
@@ -312,7 +307,7 @@ function wallHit() {
   // left or right wall
   if (ball.x + ball.radius >= canvas.width || ball.x - ball.radius <= 0) {
     ball.xVelocity *= -1
-    // if ball is still past a left or right wall in the next frame, it will get stuck,
+    // if ball is still past a left or right wall in the next frame, it will get stuck
     if (ball.x + ball.radius + ball.xVelocity >= canvas.width) {
       // make it jump back into the canvas
       ball.x = canvas.width - ball.radius - 1
